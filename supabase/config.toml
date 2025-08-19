@@ -1,1 +1,4 @@
 project_id = "nkuoytecltlvoznlmxfp"
+
+[functions.generate-icebreaker]
+verify_jwt = false

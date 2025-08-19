@@ -1,73 +1,127 @@
-# Welcome to your Lovable project
+# IceBrAIker - AI-Powered Conversation Starters
 
-## Project info
+IceBrAIker is a sophisticated RAG (Retrieval-Augmented Generation) application that helps you create personalized conversation starters by analyzing public profile information and generating contextually relevant icebreakers.
 
-**URL**: https://lovable.dev/projects/6492930d-f5c2-4667-b1f8-7f85417943f9
+## Features
 
-## How can I edit this code?
+- 🧠 **Smart Context Analysis**: Uses Tavily API to search and analyze public profile information
+- 💬 **AI-Powered Generation**: Leverages Google Gemini AI for natural, personalized icebreakers  
+- 🎯 **Vector Search**: Implements pgvector for semantic similarity matching
+- 💾 **Favorites System**: Save and organize your best conversation starters
+- 🎨 **Beautiful UI**: Modern, responsive design with gradient themes
+- 🔍 **Advanced Filtering**: Search and filter saved icebreakers by tone and keywords
 
-There are several ways of editing your application.
+## Tech Stack
 
-**Use Lovable**
+- **Frontend**: React + Vite + TypeScript + Tailwind CSS
+- **Backend**: Supabase (Postgres + pgvector) + Edge Functions
+- **AI Services**: 
+  - Google Gemini (gemini-1.5-pro for generation, text-embedding-004 for embeddings)
+  - Tavily API for web search
+- **Database**: PostgreSQL with pgvector extension for vector similarity search
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/6492930d-f5c2-4667-b1f8-7f85417943f9) and start prompting.
+## Setup Instructions
 
-Changes made via Lovable will be committed automatically to this repo.
+### 1. Clone and Install Dependencies
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```bash
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### 2. API Keys Configuration
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+The application requires two API keys that are already configured in your Supabase project:
 
-**Use GitHub Codespaces**
+- **Gemini API Key**: Get from [Google AI Studio](https://makersuite.google.com/app/apikey)
+- **Tavily API Key**: Get from [Tavily Dashboard](https://tavily.com/)
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Both keys have been securely added to your Supabase project's secrets management.
 
-## What technologies are used for this project?
+### 3. Database Schema
 
-This project is built with:
+The application automatically created the following database structure:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+- `sources`: Stores chunked content with 768-dimensional vector embeddings
+- `drafts`: Stores generated icebreakers and user favorites  
+- `match_sources()`: RPC function for vector similarity search using cosine distance
 
-## How can I deploy this project?
+## How It Works
 
-Simply open [Lovable](https://lovable.dev/projects/6492930d-f5c2-4667-b1f8-7f85417943f9) and click on Share -> Publish.
+### RAG Pipeline
 
-## Can I connect a custom domain to my Lovable project?
+1. **Content Retrieval**: Enter a profile URL or keywords:
+   - App checks for existing sources in database
+   - If not found, uses Tavily API to fetch fresh web content
 
-Yes, you can!
+2. **Content Processing**: 
+   - Chunks content into ~800-1000 token segments
+   - Generates embeddings using Gemini's text-embedding-004 model
+   - Stores in Supabase with pgvector extension
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+3. **Query Processing**:
+   - Converts user query + goal into an embedding
+   - Performs vector similarity search (cosine distance)
+   - Retrieves top 6 most relevant content chunks
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+4. **Generation**:
+   - Constructs prompt with retrieved context, user goal, and tone
+   - Uses Gemini 1.5 Pro to generate 2-3 sentence icebreaker
+   - Returns both the icebreaker and source snippets used
+
+### Architecture Flow
+
+```
+User Input → Tavily Search → Content Chunking → Embeddings (Gemini) 
+    ↓
+Vector Storage (pgvector) → Similarity Search → Context Retrieval
+    ↓  
+Prompt Construction → Generation (Gemini) → Icebreaker Output
+```
+
+## Pages & Features
+
+- **Home Page**: Main interface for generating icebreakers with tone selection
+- **Favorites Page**: View, search, filter, and manage saved icebreakers
+- **Real-time Processing**: See which sources were used for each generation
+- **Copy & Regenerate**: Easily copy results or generate alternatives
+
+## Prompt Template
+
+The AI uses this carefully crafted prompt:
+
+```
+Write a warm, specific 2–3 sentence icebreaker using the context.
+Rules: mention 1–2 concrete details, avoid clichés and generic praise, match the requested tone, end with a gentle question.
+Context: {{CONTEXT}}
+User goal: {{GOAL}}
+Tone: {{TONE}}
+```
+
+## Security & Ethics
+
+- ⚠️ **Responsible Use**: Designed for analyzing public information only
+- 🔒 **Privacy**: Respects website Terms of Service and robots.txt
+- 🛡️ **Data Protection**: API keys securely stored in Supabase secrets
+- 📋 **Row-Level Security**: Database policies ensure proper data isolation
+
+## Deployment
+
+Ready for deployment on Lovable or any platform supporting:
+- Static site hosting (Netlify, Vercel, etc.)
+- Supabase backend integration
+- Environment variable management
+
+Click **Share → Publish** in your [Lovable Project](https://lovable.dev/projects/6492930d-f5c2-4667-b1f8-7f85417943f9) to deploy instantly.
+
+## Extension Ideas
+
+- Sentiment analysis for supportive tone adjustment
+- Bulk processing for multiple profiles
+- Integration with LinkedIn or other platforms
+- Custom tone presets and user preferences
+- Analytics dashboard for usage tracking
+
+## License
+
+MIT License - Use this as a learning resource or foundation for your own RAG applications.
