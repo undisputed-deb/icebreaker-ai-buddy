@@ -1,288 +1,184 @@
-import React, { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Copy, Heart, RefreshCw, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import React, { useState } from "react";
+import { Heart, Sparkles, MessageCircle, ArrowRight } from "lucide-react";
+// If you have a Supabase client and a "drafts" table, keep this import.
+// Otherwise you can safely remove it and the save-to-favorites handler.
+import { supabase } from "@/integrations/supabase/client";
 
-const PROMPT_TEMPLATE = `Write a warm, specific 2–3 sentence icebreaker using the context.
-Rules: mention 1–2 concrete details, avoid clichés and generic praise, match the requested tone, end with a gentle question.
-Context:
-{{CONTEXT}}
-User goal:
-{{GOAL}}
-Tone:
-{{TONE}}`;
+type Props = {
+  onDraft?: (draft: string) => void;
+};
 
-interface GeneratedResult {
-  draft: string;
-  sources: Array<{
-    id: string;
-    content: string;
-    title: string;
-    similarity: number;
-  }>;
-}
+const EDGE_FUNCTION_URL =
+  "https://nkuoytecltlvoznlmxfp.functions.supabase.co/generate-icebreaker";
 
-export const IcebreakerForm = () => {
-  const [profileUrl, setProfileUrl] = useState('');
-  const [tone, setTone] = useState('');
-  const [goal, setGoal] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<GeneratedResult | null>(null);
-  const [expandedSources, setExpandedSources] = useState(false);
-  const { toast } = useToast();
+const IcebreakerForm: React.FC<Props> = ({ onDraft }) => {
+  const [profileUrl, setProfileUrl] = useState("");
+  const [tone, setTone] = useState<"Professional" | "Friendly" | "Warm" | "Casual">("Professional");
+  const [goal, setGoal] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [result, setResult] = useState("");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleGenerate = async () => {
     if (!profileUrl.trim()) {
-      toast({
-        title: "Input required",
-        description: "Please enter a profile URL or keywords",
-        variant: "destructive"
-      });
+      setErrorMsg("Please enter a profile URL or keywords.");
       return;
     }
-
-    if (!tone) {
-      toast({
-        title: "Tone required", 
-        description: "Please select a tone",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsLoading(true);
+    setErrorMsg(null);
+    setIsGenerating(true);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-icebreaker', {
-        body: {
+      const res = await fetch(EDGE_FUNCTION_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           profileUrl: profileUrl.trim(),
           tone,
-          goal: goal.trim()
-        }
+          goal: goal.trim(),
+        }),
       });
 
-      if (error) throw error;
+      const data = await res.json();
 
-      setResult(data);
-      toast({
-        title: "Icebreaker generated!",
-        description: "Your personalized conversation starter is ready"
-      });
-    } catch (error: any) {
-      console.error('Generation error:', error);
-      toast({
-        title: "Generation failed",
-        description: error.message || "Please try again",
-        variant: "destructive"
-      });
+      if (!res.ok) {
+        throw new Error(data?.error || "Generation failed");
+      }
+
+      const draft: string = data?.draft || "";
+      setResult(draft);
+      onDraft?.(draft);
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Something went wrong while generating.");
     } finally {
-      setIsLoading(false);
+      setIsGenerating(false);
+    }
+  };
+
+  const handleCopy = async () => {
+    if (!result) return;
+    try {
+      await navigator.clipboard.writeText(result);
+    } catch {
+      // silent fail is fine
     }
   };
 
   const handleSaveToFavorites = async () => {
     if (!result) return;
-
     try {
-      const { error } = await supabase
-        .from('drafts')
-        .insert({
-          profile_url: profileUrl,
-          query: profileUrl,
-          tone,
-          goal,
-          draft: result.draft,
-          metadata: { sources: result.sources }
-        });
-
-      if (error) throw error;
-
-      toast({
-        title: "Saved to favorites!",
-        description: "Your icebreaker has been saved"
+      await supabase.from("drafts").insert({
+        profile_url: profileUrl,
+        query: profileUrl,
+        tone,
+        goal,
+        draft: result,
+        metadata: {},
       });
-    } catch (error: any) {
-      console.error('Save error:', error);
-      toast({
-        title: "Save failed",
-        description: error.message || "Please try again",
-        variant: "destructive"
-      });
+    } catch {
+      // ignore if you don't use Supabase client on the frontend
     }
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast({
-      title: "Copied!",
-      description: "Text copied to clipboard"
-    });
-  };
-
-  const handleClear = () => {
-    setProfileUrl('');
-    setTone('');
-    setGoal('');
-    setResult(null);
-    setExpandedSources(false);
   };
 
   return (
     <div className="space-y-6">
-      <Card className="bg-gradient-to-br from-background to-muted/20 border-primary/20 shadow-lg">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-2xl">
-            <Sparkles className="text-primary" />
-            Generate Icebreaker
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <label className="text-sm font-medium mb-2 block">
-              Profile URL or Keywords *
-            </label>
-            <Input
-              placeholder="e.g., LinkedIn profile URL, name + company, or keywords..."
-              value={profileUrl}
-              onChange={(e) => setProfileUrl(e.target.value)}
-              className="w-full"
-            />
-          </div>
+      <div className="space-y-4">
+        <div className="form-group">
+          <label className="block text-sm font-medium text-gray-200 mb-2">
+            Profile URL or Keywords *
+          </label>
+          <input
+            type="text"
+            value={profileUrl}
+            onChange={(e) => setProfileUrl(e.target.value)}
+            placeholder="https://www.linkedin.com/in/username or keywords"
+            className="w-full px-4 py-3 rounded-lg bg-black/20 border border-white/20 text-white placeholder-gray-400 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 transition-all duration-300 backdrop-blur-sm"
+          />
+        </div>
 
-          <div>
-            <label className="text-sm font-medium mb-2 block">
-              Tone *
-            </label>
-            <Select value={tone} onValueChange={setTone}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select conversation tone" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="friendly">Friendly</SelectItem>
-                <SelectItem value="professional">Professional</SelectItem>
-                <SelectItem value="playful">Playful</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="form-group">
+          <label className="block text-sm font-medium text-gray-200 mb-2">
+            Tone *
+          </label>
+          <select
+            value={tone}
+            onChange={(e) => setTone(e.target.value as any)}
+            className="w-full px-4 py-3 rounded-lg bg-black/20 border border-white/20 text-white focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 transition-all duration-300 backdrop-blur-sm"
+          >
+            <option>Professional</option>
+            <option>Friendly</option>
+            <option>Warm</option>
+            <option>Casual</option>
+          </select>
+        </div>
 
-          <div>
-            <label className="text-sm font-medium mb-2 block">
-              Your Goal (Optional)
-            </label>
-            <Textarea
-              placeholder="What do you hope to achieve with this conversation?"
-              value={goal}
-              onChange={(e) => setGoal(e.target.value)}
-              rows={3}
-            />
-          </div>
+        <div className="form-group">
+          <label className="block text-sm font-medium text-gray-200 mb-2">
+            Your Goal (Optional)
+          </label>
+          <textarea
+            value={goal}
+            onChange={(e) => setGoal(e.target.value)}
+            placeholder="I want to learn about their experience with..."
+            rows={3}
+            className="w-full px-4 py-3 rounded-lg bg-black/20 border border-white/20 text-white placeholder-gray-400 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 transition-all duration-300 resize-none backdrop-blur-sm"
+          />
+        </div>
 
-          <div className="flex gap-2">
-            <Button 
-              onClick={handleGenerate} 
-              disabled={isLoading}
-              className="flex-1 bg-gradient-to-r from-primary to-primary-glow hover:opacity-90 transition-opacity"
-            >
-              {isLoading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Generate Icebreaker
-                </>
-              )}
-            </Button>
-            {result && (
-              <Button variant="outline" onClick={handleClear}>
-                Clear
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+        {errorMsg && (
+          <p className="text-sm text-red-400 -mt-2">{errorMsg}</p>
+        )}
+
+        <button
+          onClick={handleGenerate}
+          disabled={!profileUrl || !tone || isGenerating}
+          className="cyber-button w-full py-4 px-6 rounded-lg bg-gradient-to-r from-cyan-500 to-purple-500 text-white font-semibold hover:from-cyan-400 hover:to-purple-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 hover:shadow-xl group relative overflow-hidden"
+        >
+          {isGenerating ? (
+            <div className="flex items-center justify-center gap-2">
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              Generating...
+            </div>
+          ) : (
+            <div className="flex items-center justify-center gap-2">
+              <Sparkles className="w-5 h-5" />
+              Generate Icebreaker
+              <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
+            </div>
+          )}
+        </button>
+      </div>
 
       {result && (
-        <Card className="border-primary/20 shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-xl">Your Icebreaker</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="p-4 rounded-lg bg-gradient-to-r from-primary/5 to-primary-glow/5 border border-primary/20">
-              <p className="text-lg leading-relaxed">{result.draft}</p>
-            </div>
-
-            <div className="flex gap-2 flex-wrap">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => copyToClipboard(result.draft)}
-              >
-                <Copy className="w-4 h-4 mr-2" />
-                Copy
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={handleGenerate}
-                disabled={isLoading}
-              >
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Regenerate
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={handleSaveToFavorites}
-              >
-                <Heart className="w-4 h-4 mr-2" />
-                Save to Favorites
-              </Button>
-            </div>
-
-            {result.sources?.length > 0 && (
-              <div className="border-t pt-4">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setExpandedSources(!expandedSources)}
-                  className="mb-3"
-                >
-                  {expandedSources ? (
-                    <ChevronUp className="w-4 h-4 mr-2" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4 mr-2" />
-                  )}
-                  {result.sources.length} source{result.sources.length !== 1 ? 's' : ''} used
-                </Button>
-
-                {expandedSources && (
-                  <div className="space-y-3">
-                    {result.sources.map((source, idx) => (
-                      <div key={source.id} className="p-3 rounded bg-muted/50 border">
-                        <div className="flex justify-between items-start mb-2">
-                          <span className="font-medium text-sm">{source.title}</span>
-                          <Badge variant="outline" className="text-xs">
-                            {Math.round(source.similarity * 100)}% match
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{source.content}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <div className="result-card mt-8 p-6 rounded-lg bg-gradient-to-r from-green-500/10 to-cyan-500/10 border border-green-400/30 backdrop-blur-sm">
+          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <MessageCircle className="w-5 h-5 text-green-400" />
+            Your Icebreaker
+          </h3>
+          <p className="text-gray-200 leading-relaxed mb-4">{result}</p>
+          <div className="flex gap-3">
+            <button
+              onClick={handleCopy}
+              className="action-btn px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-all duration-300 hover:scale-105"
+            >
+              📋 Copy
+            </button>
+            <button
+              onClick={handleGenerate}
+              disabled={isGenerating}
+              className="action-btn px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-all duration-300 hover:scale-105 disabled:opacity-50"
+            >
+              🔄 Regenerate
+            </button>
+            <button
+              onClick={handleSaveToFavorites}
+              className="action-btn px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-all duration-300 hover:scale-105"
+            >
+              ❤️ Save to Favorites
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
 };
+
+export default IcebreakerForm;
